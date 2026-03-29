@@ -1,42 +1,86 @@
 #!/usr/bin/env python3
-"""Ring buffer: fixed-size circular queue with overwrite policy."""
-import sys
+"""Ring buffer (circular buffer) implementation."""
 
 class RingBuffer:
-    def __init__(self, capacity):
-        self.cap = capacity; self.buf = [None]*capacity
-        self.head = 0; self.tail = 0; self.size = 0; self.overflows = 0
+    def __init__(self, capacity: int):
+        self._buf = [None] * capacity
+        self._capacity = capacity
+        self._head = 0  # next write position
+        self._size = 0
+
     def push(self, item):
-        self.buf[self.tail] = item; self.tail = (self.tail + 1) % self.cap
-        if self.size == self.cap:
-            self.head = (self.head + 1) % self.cap; self.overflows += 1
-        else: self.size += 1
+        self._buf[self._head] = item
+        self._head = (self._head + 1) % self._capacity
+        if self._size < self._capacity:
+            self._size += 1
+
     def pop(self):
-        if self.size == 0: return None
-        item = self.buf[self.head]; self.buf[self.head] = None
-        self.head = (self.head + 1) % self.cap; self.size -= 1
+        if self._size == 0:
+            raise IndexError("pop from empty buffer")
+        tail = (self._head - self._size) % self._capacity
+        item = self._buf[tail]
+        self._size -= 1
         return item
-    def peek(self): return self.buf[self.head] if self.size > 0 else None
-    def is_full(self): return self.size == self.cap
-    def is_empty(self): return self.size == 0
+
+    def peek(self):
+        if self._size == 0:
+            raise IndexError("peek at empty buffer")
+        tail = (self._head - self._size) % self._capacity
+        return self._buf[tail]
+
+    def __len__(self):
+        return self._size
+
+    def __bool__(self):
+        return self._size > 0
+
+    @property
+    def full(self):
+        return self._size == self._capacity
+
     def to_list(self):
         result = []
-        idx = self.head
-        for _ in range(self.size):
-            result.append(self.buf[idx]); idx = (idx + 1) % self.cap
+        for i in range(self._size):
+            idx = (self._head - self._size + i) % self._capacity
+            result.append(self._buf[idx])
         return result
-    def stats(self):
-        return {"size":self.size,"capacity":self.cap,"overflows":self.overflows,
-                "utilization":f"{self.size/self.cap*100:.0f}%"}
 
-def main():
+    def clear(self):
+        self._head = 0
+        self._size = 0
+
+if __name__ == "__main__":
     rb = RingBuffer(5)
-    for i in range(8): rb.push(i)  # will overflow 3 times
-    print(f"  After pushing 0-7 into size-5 buffer: {rb.to_list()}")
-    print(f"  Stats: {rb.stats()}")
-    print(f"  Pop: {rb.pop()}, {rb.pop()}")
-    print(f"  After 2 pops: {rb.to_list()}")
-    rb.push(100); rb.push(200)
-    print(f"  After 2 more pushes: {rb.to_list()}")
+    for i in range(8):
+        rb.push(i)
+    print(f"Contents: {rb.to_list()}")
+    print(f"Size: {len(rb)}, Full: {rb.full}")
 
-if __name__ == "__main__": main()
+def test():
+    rb = RingBuffer(3)
+    assert len(rb) == 0
+    rb.push(1); rb.push(2); rb.push(3)
+    assert len(rb) == 3
+    assert rb.full
+    assert rb.to_list() == [1, 2, 3]
+    # Overflow
+    rb.push(4)
+    assert rb.to_list() == [2, 3, 4]
+    assert len(rb) == 3
+    # Pop (FIFO)
+    assert rb.pop() == 2
+    assert rb.pop() == 3
+    assert len(rb) == 1
+    # Peek
+    assert rb.peek() == 4
+    # Clear
+    rb.clear()
+    assert len(rb) == 0
+    assert not rb
+    # Error on empty
+    try:
+        rb.pop()
+        assert False
+    except IndexError:
+        pass
+    print("  ring_buffer2: ALL TESTS PASSED")
